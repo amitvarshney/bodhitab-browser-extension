@@ -1,0 +1,8 @@
+Weather widget removal checklist:
+
+- [ ] Delete src/components/WeatherWidget.tsx
+- [ ] Delete src/services/weatherService.ts
+- [ ] Remove any import and usage of WeatherWidget from App.tsx and other UI files
+- [ ] Remove weather-related instructions from README.md
+- [ ] Remove weather-related types/interfaces if not used elsewhere
+- [ ] Remove any weather-related state or logic from the app
