@@ -15,7 +15,7 @@ export interface QuoteResponse {
 }
 
 // Your own API endpoints (update these URLs after deployment)
-const BODHITAB_API_URL = 'https://your-project-name.vercel.app/api';
+const BODHITAB_API_URL = 'https://bodhitab-quotes-api.vercel.app/api';
 const ZENQUOTES_API_URL = 'https://zenquotes.io/api/random';
 
 class QuoteService {
