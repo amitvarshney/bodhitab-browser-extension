@@ -11,7 +11,7 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,
+        drop_console: false, // Keep console.log for debugging
         drop_debugger: true
       }
     },
@@ -53,7 +53,7 @@ export default defineConfig({
     include: ['react', 'react-dom', 'framer-motion'],
   },
   esbuild: {
-    pure: ['console.log', 'console.debug', 'console.info'],
+    // Keep console.log for debugging - remove pure markers
     treeShaking: true,
   },
 } as UserConfig)
