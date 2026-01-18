@@ -14,14 +14,48 @@ export interface QuoteResponse {
   category: string;
 }
 
-// Your own API endpoints (update these URLs after deployment)
+// BodhiTab Quotes API endpoint
 const BODHITAB_API_URL = 'https://bodhitab-quotes-api.vercel.app/api';
-const ZENQUOTES_API_URL = 'https://zenquotes.io/api/random';
 
 class QuoteService {
   private cache: Map<string, Quote[]> = new Map();
   private lastFetchTime: number = 0;
   private readonly CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+  private seenLocalQuotes: Set<string> = new Set();
+  private readonly SEEN_QUOTES_KEY = 'bodhitab_seen_quotes';
+
+  constructor() {
+    this.loadSeenQuotes();
+  }
+
+  private async loadSeenQuotes(): Promise<void> {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const result = await chrome.storage.local.get(this.SEEN_QUOTES_KEY);
+        if (result[this.SEEN_QUOTES_KEY]) {
+          this.seenLocalQuotes = new Set(result[this.SEEN_QUOTES_KEY]);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load seen quotes:', error);
+    }
+  }
+
+  private async saveSeenQuotes(): Promise<void> {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        await chrome.storage.local.set({
+          [this.SEEN_QUOTES_KEY]: Array.from(this.seenLocalQuotes)
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to save seen quotes:', error);
+    }
+  }
+
+  private isOnline(): boolean {
+    return navigator.onLine;
+  }
 
   private async fetchWithTimeout(url: string, timeout: number = 5000): Promise<Response> {
     const controller = new AbortController();
@@ -61,58 +95,69 @@ class QuoteService {
     }
   }
 
-  private async fetchFromZenQuotes(): Promise<Quote | null> {
-    try {
-      console.log('🔄 Fetching from ZenQuotes API...');
-      const response = await this.fetchWithTimeout(ZENQUOTES_API_URL);
-      
-      if (!response.ok) {
-        throw new Error(`ZenQuotes API responded with status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const quote = data[0];
-      
-      if (!quote || !quote.q || !quote.a) {
-        throw new Error('Invalid response format from ZenQuotes');
-      }
-      
-      console.log('✅ Successfully fetched from ZenQuotes API');
-      
-      return {
-        id: Date.now(), // Generate temporary ID
-        text: quote.q,
-        author: quote.a,
-        category: 'inspiration'
-      };
-    } catch (error) {
-      console.warn('⚠️ ZenQuotes API failed:', error);
-      return null;
-    }
-  }
 
   private getRandomLocalQuote(): Quote {
-    const randomIndex = Math.floor(Math.random() * localQuotes.length);
-    return localQuotes[randomIndex];
+    // Get quotes that haven't been seen yet
+    const unseenQuotes = localQuotes.filter(quote => {
+      const quoteKey = `${quote.text}|${quote.author}`;
+      return !this.seenLocalQuotes.has(quoteKey);
+    });
+
+    // If all quotes have been seen, reset and start over
+    if (unseenQuotes.length === 0) {
+      console.log('📚 All local quotes have been shown, resetting...');
+      this.seenLocalQuotes.clear();
+      this.saveSeenQuotes();
+      return localQuotes[Math.floor(Math.random() * localQuotes.length)];
+    }
+
+    // Pick a random unseen quote
+    const randomIndex = Math.floor(Math.random() * unseenQuotes.length);
+    const selectedQuote = unseenQuotes[randomIndex];
+    
+    // Mark as seen
+    const quoteKey = `${selectedQuote.text}|${selectedQuote.author}`;
+    this.seenLocalQuotes.add(quoteKey);
+    this.saveSeenQuotes();
+    
+    return selectedQuote;
   }
 
   async getRandomQuote(): Promise<Quote> {
-    // Try BodhiTab API first (your own API)
-    let quote = await this.fetchFromBodhiTabAPI();
+    // Check if online - if offline, use local quotes immediately
+    if (!this.isOnline()) {
+      console.log('📴 Offline detected, using local quote');
+      return this.getRandomLocalQuote();
+    }
+
+    // Always try BodhiTab API first when online
+    console.log('🌐 Online - attempting to fetch from BodhiTab API...');
+    
+    const quote = await this.fetchFromBodhiTabAPI();
     
     if (quote) {
+      console.log('✅ Successfully fetched from BodhiTab API');
       return quote;
     }
     
-    // Fallback to ZenQuotes
-    quote = await this.fetchFromZenQuotes();
-    
-    if (quote) {
-      return quote;
+    // If API fails, check if we're still online
+    // If offline, use local quotes
+    if (!this.isOnline()) {
+      console.log('📴 Offline confirmed after API failure, using local quote');
+      return this.getRandomLocalQuote();
     }
     
-    // Final fallback to local quotes
-    console.log('📚 Using local quote as fallback');
+    // If API failed but we're still online, try one more time with a shorter timeout
+    console.log('⚠️ BodhiTab API failed but online, retrying...');
+    const retryQuote = await this.fetchFromBodhiTabAPI();
+    
+    if (retryQuote) {
+      console.log('✅ Successfully fetched from BodhiTab API on retry');
+      return retryQuote;
+    }
+    
+    // Final fallback to local quotes if API is unavailable
+    console.log('📚 BodhiTab API unavailable, using local quote as fallback');
     return this.getRandomLocalQuote();
   }
 

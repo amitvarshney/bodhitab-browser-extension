@@ -32,6 +32,9 @@ function createManifest(distDir) {
         "permissions": [
             "storage"
         ],
+        "host_permissions": [
+            "https://bodhitab-quotes-api.vercel.app/*"
+        ],
         "icons": {
             "16": "icons/icon16.png",
             "48": "icons/icon48.png",
